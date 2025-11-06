@@ -4,7 +4,7 @@
       :has-selection="selectedIds.length > 0"
       :styleState="currentStyle"
       @apply-style="applyPatchToSelection"
-      @delete-selected="deleteByIds(selectedIds.value);"
+      @delete-selected="deleteFromTopBar"
     />
 
     <div class="body">
@@ -63,6 +63,15 @@ import {
 const elements = elementsState.items;
 const selectedIds = elementsState.selectedIds;
 
+function deleteSelected() {
+  if (!selectedIds.value.length) return;
+  deleteByIds(selectedIds.value);
+}
+
+function deleteFromTopBar() {
+  if (!selectedIds.value.length) return;
+  deleteByIds(selectedIds.value);
+}
 
 function updateContent(payload) {
   updateContentById(payload.id, payload.content);
@@ -79,6 +88,7 @@ const currentStyle = computed(() => {
 
   return {
     type: el.type,
+    shapeType: el.shapeType,
     fontFamily: el.fontFamily,
     fontSize: el.fontSize,
     color: el.color,

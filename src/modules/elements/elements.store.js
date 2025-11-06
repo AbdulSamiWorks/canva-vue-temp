@@ -75,26 +75,6 @@ export function updateContentById(id, content) {
   setContent(el, content);
 }
 
-// export function duplicateSelected() {
-//   const ids = state.selectedIds.value;
-
-//   if (!ids.length) return;
-
-//   const newElements = ids
-//     .map((id) => {
-//       const orig = state.items.value.find((e) => e.id === id);
-//       if (!orig) return null;
-//       const copy = JSON.parse(JSON.stringify(orig));
-//       copy.id = nextId++;
-//       copy.x += 20;
-//       copy.y += 20;
-//       return copy;
-//     })
-//     .filter(Boolean);
-
-//   state.items.value.push(...newElements);
-//   setSelection(newElements.map((e) => e.id));
-// }
 
 export function moveLayer(direction = "up") {
   const ids = state.selectedIds.value;

@@ -3,17 +3,16 @@
     class="canvas"
     ref="canvasRoot"
     tabindex="0"
-    @keydown.delete.prevent="emit('delete')"
-    @keydown.backspace.prevent="emit('delete')"
+    @keydown="onKeyDown"
     @mousedown.self="clearSelection"
   >
     <div
       v-for="item in elements"
       :key="item.id"
+      v-show="!item.hidden"
       class="cvs-item"
       :class="{
         selected: selectedIds.includes(item.id),
-        hidden: item.hidden,
         locked: item.locked,
         editing: editingId === item.id,
       }"
@@ -21,14 +20,13 @@
       :style="styleFor(item)"
       @dblclick.stop="enableEdit($event, item)"
     >
- 
       <component
         :is="getComponent(item.type)"
         :item="item"
         :editing-id="editingId"
         :triangle-points="trianglePoints"
         @input="onInput($event, item)"
-        @focus="moveCursorToEnd($event)"
+        @focus="moveCaretToEnd($event)"
         @blur="disableEdit($event, item)"
       />
     </div>
@@ -40,7 +38,6 @@ import { ref, watch, nextTick, onMounted } from "vue";
 import { useMoveable } from "../../composables/useMoveable";
 import { useSelecto } from "../../composables/useSelecto";
 import { setSelection } from "../../modules/elements/elements.store";
-
 import TextNode from "./nodes/TextNode.vue";
 import ShapeNode from "./nodes/ShapeNode.vue";
 import ImageNode from "./nodes/ImageNode.vue";
@@ -71,6 +68,14 @@ function getComponent(type) {
   return componentMap[type] || null;
 }
 
+function onKeyDown(e) {
+  if (editingId.value !== null) return;
+  if (e.key === "Delete" || e.key === "Backspace") {
+    e.preventDefault();
+    emit("delete");
+  }
+}
+
 function styleFor(item) {
   const base = {
     position: "absolute",
@@ -83,12 +88,8 @@ function styleFor(item) {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    cursor: item.locked
-      ? "not-allowed"
-      : item.type === "text"
-      ? "text"
-      : "move",
-    pointerEvents: item.hidden ? "none" : "auto",
+    cursor: item.locked ? "not-allowed" : "move",
+    pointerEvents: item.locked ? "none" : "auto",
   };
 
   if (item.type === "text") {
@@ -120,28 +121,67 @@ onMounted(() => {
   canvasRoot.value?.focus();
 
   useSelecto(canvasRoot.value, (ids) => {
-    setSelection(ids);
-    emit("update:selectedIds", ids);
+    const selectableIds = ids.filter((id) => {
+      const el = props.elements.find((e) => e.id === id);
+      return el && !el.hidden && !el.locked;
+    });
+    setSelection(selectableIds);
+    emit("update:selectedIds", selectableIds);
   });
 
   mv = useMoveable(canvasRoot.value, {
-    onDrag: ({ target, left, top }) => {
+    onDragStart: ({ target }) => {
       const id = Number(target.dataset.id);
       const item = props.elements.find((e) => e.id === id);
-      if (item?.locked) return;
-      emit("update:geometry", { id, x: Math.round(left), y: Math.round(top) });
+      if (item?.locked) return false; 
+      target.style.willChange = "left, top, transform";
     },
-    onResize: ({ target, width, height, drag }) => {
+    onDrag: ({ target, left, top }) => {
+      target.style.left = `${Math.round(left)}px`;
+      target.style.top = `${Math.round(top)}px`;
+    },
+    onDragEnd: ({ target, lastEvent }) => {
+      target.style.willChange = "auto";
+      if (!lastEvent) return;
       const id = Number(target.dataset.id);
       const item = props.elements.find((e) => e.id === id);
       if (item?.locked) return;
       emit("update:geometry", {
         id,
-        width: Math.round(width),
-        height: Math.round(height),
-        x: Math.round(drag.left),
-        y: Math.round(drag.top),
+        x: Math.round(lastEvent.left),
+        y: Math.round(lastEvent.top),
       });
+    },
+    onResizeStart: ({ target }) => {
+      const id = Number(target.dataset.id);
+      const item = props.elements.find((e) => e.id === id);
+      if (item?.locked) return false;
+      target.style.willChange = "width, height, left, top, transform";
+    },
+    onResize: ({ target, width, height, drag }) => {
+      target.style.width = `${Math.round(width)}px`;
+      target.style.height = `${Math.round(height)}px`;
+      target.style.left = `${Math.round(drag.left)}px`;
+      target.style.top = `${Math.round(drag.top)}px`;
+    },
+    onResizeEnd: ({ target, lastEvent }) => {
+      target.style.willChange = "auto";
+      if (!lastEvent) return;
+      const id = Number(target.dataset.id);
+      const item = props.elements.find((e) => e.id === id);
+      if (item?.locked) return;
+      emit("update:geometry", {
+        id,
+        width: Math.round(lastEvent.width),
+        height: Math.round(lastEvent.height),
+        x: Math.round(lastEvent.drag.left),
+        y: Math.round(lastEvent.drag.top),
+      });
+    },
+    onRotateStart: ({ target }) => {
+      const id = Number(target.dataset.id);
+      const item = props.elements.find((e) => e.id === id);
+      if (item?.locked) return false;
     },
     onRotate: ({ target, beforeRotate }) => {
       const id = Number(target.dataset.id);
@@ -151,13 +191,18 @@ onMounted(() => {
     },
   });
 
+
   watch(
     () => props.selectedIds.slice(),
     async (ids) => {
       await nextTick();
       const nodes = Array.from(
         canvasRoot.value.querySelectorAll(".cvs-item")
-      ).filter((el) => ids.includes(Number(el.dataset.id)));
+      ).filter((el) => {
+        const id = Number(el.dataset.id);
+        const item = props.elements.find((e) => e.id === id);
+        return ids.includes(id) && !item?.hidden && !item?.locked; 
+      });
       mv.setTargets(nodes);
     },
     { immediate: true }
@@ -171,15 +216,12 @@ function clearSelection() {
 
 function enableEdit(evt, item) {
   if (item.type !== "text" || item.locked) return;
-
   editingId.value = item.id;
-
   if (mv) {
-    mv.draggable = false;
-    mv.resizable = false;
-    mv.rotatable = false;
+    mv.instance.draggable = false;
+    mv.instance.resizable = false;
+    mv.instance.rotatable = false;
   }
-
   nextTick(() => {
     const node = evt.currentTarget.querySelector(".text-node");
     if (node) {
@@ -191,17 +233,15 @@ function enableEdit(evt, item) {
 
 function disableEdit(evt, item) {
   editingId.value = null;
-
   if (mv) {
-    mv.draggable = true;
-    mv.resizable = true;
-    mv.rotatable = true;
+    mv.instance.draggable = true;
+    mv.instance.resizable = true;
+    mv.instance.rotatable = true;
   }
-
   emit("update:content", { id: item.id, content: evt.currentTarget.innerText });
 }
 
-function moveCursorToEnd(evt) {
+function moveCaretToEnd(evt) {
   const el = evt.currentTarget;
   requestAnimationFrame(() => {
     const range = document.createRange();
@@ -213,7 +253,7 @@ function moveCursorToEnd(evt) {
   });
 }
 
-function onInput(evt, _) {
+function onInput(evt) {
   evt.currentTarget.dataset.temp = evt.currentTarget.innerText;
 }
 
@@ -244,26 +284,9 @@ const trianglePoints = "50,0 100,100 0,100";
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2) inset;
 }
 
-.cvs-item.hidden {
-  opacity: 0.3;
-  pointer-events: none;
-}
-
 .cvs-item.locked {
   cursor: not-allowed;
   opacity: 0.6;
-}
-
-.cvs-item.editing {
-  user-select: text;
-}
-
-.text-node[contenteditable="true"] {
-  outline: none;
-  direction: ltr;
-  unicode-bidi: plaintext;
-  caret-color: auto;
-  user-select: text;
-  white-space: pre-wrap;
+  pointer-events: none;
 }
 </style>

@@ -1,6 +1,5 @@
 <template>
   <header class="topbar">
-
     <div class="tools" v-if="hasSelection && styleState">
       <template v-if="styleState.type === 'text'">
         <select
@@ -81,16 +80,25 @@
           @change="commit({ strokeWidth: local.strokeWidth })"
         />
 
-        <label>Border Radius</label>
-        <input
-          type="range"
-          class="input"
-          min="0"
-          max="50"
-          step="1"
-          v-model.number="local.borderRadius"
-          @input="commit({ borderRadius: local.borderRadius })"
-        />
+        <template
+          v-if="
+            styleState.type === 'image' ||
+            (styleState.type === 'shape' &&
+              styleState.shapeType !== 'circle' &&
+              styleState.shapeType !== 'triangle')
+          "
+        >
+          <label>Border Radius</label>
+          <input
+            type="range"
+            class="input"
+            min="0"
+            max="50"
+            step="1"
+            v-model.number="local.borderRadius"
+            @input="commit({ borderRadius: local.borderRadius })"
+          />
+        </template>
 
         <label>Opacity</label>
         <input
@@ -146,8 +154,8 @@ const local = reactive({
   bold: false,
   italic: false,
   underline: false,
-  fill: "#4f46e5",
-  stroke: "#111827",
+  fill: "#ff002fff",
+  stroke: "#05fe3bff",
   strokeWidth: 2,
   borderRadius: 0,
   opacity: 1,
@@ -157,14 +165,20 @@ watch(
   () => props.styleState,
   (s) => {
     if (!s) return;
+
+    const cleanHex = (color) => {
+      if (!color) return color;
+      return color.length === 9 ? color.slice(0, 7) : color;
+    };
+
     local.fontFamily = s.fontFamily ?? local.fontFamily;
     local.fontSize = s.fontSize ?? local.fontSize;
-    local.color = s.color ?? local.color;
+    local.color = cleanHex(s.color ?? local.color);
     local.bold = !!s.bold;
     local.italic = !!s.italic;
     local.underline = !!s.underline;
-    local.fill = s.fill ?? local.fill;
-    local.stroke = s.stroke ?? local.stroke;
+    local.fill = cleanHex(s.fill ?? local.fill);
+    local.stroke = cleanHex(s.stroke ?? local.stroke);
     local.strokeWidth = s.strokeWidth ?? local.strokeWidth;
     local.borderRadius = s.borderRadius ?? local.borderRadius;
     local.opacity = s.opacity ?? local.opacity;
