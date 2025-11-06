@@ -83,8 +83,11 @@ function updateGeometry(payload) {
 
 const currentStyle = computed(() => {
   if (!selectedIds.value.length) return null;
+
   const el = elements.value.find((e) => e.id === selectedIds.value[0]);
   if (!el) return null;
+
+  if (el.locked) return null;
 
   return {
     type: el.type,
@@ -102,6 +105,7 @@ const currentStyle = computed(() => {
     opacity: el.opacity,
   };
 });
+
 </script>
 
 <style scoped>
